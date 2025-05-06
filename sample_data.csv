@@ -1,16 +1,3 @@
-text,platform
-"I love this app! It's so intuitive and helpful.","App Store"
-"The app keeps crashing when I try to upload photos.","Google Play"
-"Would be great if you could add dark mode to the app.","Twitter"
-"This is the best productivity app I've ever used!","App Store"
-"Can't login after the latest update. Please fix ASAP.","Google Play"
-"The UI is beautiful but navigation is confusing.","Twitter"
-"Would love to see integration with other tools.","Email"
-"App is too slow on older devices.","Google Play"
-"Customer support was amazing when I had an issue.","App Store"
-"The new feature is exactly what I was looking for!","Twitter"
-"The app crashes every time I try to save my progress.","Google Play"
-"Please add the ability to export data to CSV.","Email"
-"I've been using this app for years and it keeps getting better!","App Store"
-"The notifications are too frequent and annoying.","Google Play"
-"Would it be possible to add multi-user support?","Twitter"
+version https://git-lfs.github.com/spec/v1
+oid sha256:91ca0e93e3ce35ea66107a74eab276ed3d5b77adbe64eef6926f400eb7af3796
+size 969
