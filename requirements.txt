@@ -1,0 +1,12 @@
+streamlit
+pandas
+numpy
+matplotlib
+nltk
+scikit-learn
+textblob
+wordcloud
+plotly
+openpyxl
+fpdf
+chardet
