@@ -113,8 +113,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Streamlit
-.streamlit/
+# Streamlit local cache
+.streamlit/cache/
 
 # IDE specific files
 .idea/
