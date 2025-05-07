@@ -153,6 +153,8 @@ def main():
             st.subheader("Running Advanced App...")
             # Import the module but don't call set_page_config again
             import advanced_app
+            # Initialize session state
+            advanced_app.initialize_session_state()
             # Run the main function from the module
             advanced_app.main()
             # Add a button to return to the launcher

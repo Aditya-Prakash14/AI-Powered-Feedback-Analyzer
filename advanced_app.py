@@ -98,22 +98,26 @@ except Exception as e:
 nltk_init_container.empty()
 
 # Initialize session state variables if they don't exist
-if 'data' not in st.session_state:
-    st.session_state.data = None
-if 'processed_data' not in st.session_state:
-    st.session_state.processed_data = None
-if 'summaries' not in st.session_state:
-    st.session_state.summaries = {}
-if 'topics' not in st.session_state:
-    st.session_state.topics = {}
-if 'config' not in st.session_state:
-    st.session_state.config = {
-        'sentiment_threshold': 0.1,
-        'min_topic_words': 5,
-        'num_topics': 3,
-        'num_clusters': 4,
-        'min_word_length': 3
-    }
+def initialize_session_state():
+    if 'data' not in st.session_state:
+        st.session_state.data = None
+    if 'processed_data' not in st.session_state:
+        st.session_state.processed_data = None
+    if 'summaries' not in st.session_state:
+        st.session_state.summaries = {}
+    if 'topics' not in st.session_state:
+        st.session_state.topics = {}
+    if 'config' not in st.session_state:
+        st.session_state.config = {
+            'sentiment_threshold': 0.1,
+            'min_topic_words': 5,
+            'num_topics': 3,
+            'num_clusters': 4,
+            'min_word_length': 3
+        }
+
+# Initialize session state
+initialize_session_state()
 
 # Function to detect CSV delimiter
 def detect_delimiter(file_content):
@@ -1387,21 +1391,35 @@ def main():
 
 # Function to process uploaded file
 def process_uploaded_file(uploaded_file):
+    # Make sure session state is initialized
+    initialize_session_state()
+
     # Sidebar
     st.sidebar.header("Options")
 
     # Configuration panel
     with st.sidebar.expander("Configuration", expanded=False):
-        st.slider("Sentiment Threshold", 0.0, 0.5, st.session_state.config['sentiment_threshold'], 0.05,
-                 help="Threshold for classifying sentiment as positive or negative")
-        st.slider("Minimum Topic Words", 3, 10, st.session_state.config['min_topic_words'], 1,
-                 help="Minimum number of words to include in each topic")
-        st.slider("Number of Topics", 2, 10, st.session_state.config['num_topics'], 1,
-                 help="Number of topics to extract from feedback")
-        st.slider("Number of Clusters", 2, 10, st.session_state.config['num_clusters'], 1,
-                 help="Number of clusters to create from feedback")
-        st.slider("Minimum Word Length", 2, 6, st.session_state.config['min_word_length'], 1,
-                 help="Minimum length of words to include in analysis")
+        # Update config values based on sliders
+        st.session_state.config['sentiment_threshold'] = st.slider(
+            "Sentiment Threshold", 0.0, 0.5, st.session_state.config['sentiment_threshold'], 0.05,
+            help="Threshold for classifying sentiment as positive or negative"
+        )
+        st.session_state.config['min_topic_words'] = st.slider(
+            "Minimum Topic Words", 3, 10, st.session_state.config['min_topic_words'], 1,
+            help="Minimum number of words to include in each topic"
+        )
+        st.session_state.config['num_topics'] = st.slider(
+            "Number of Topics", 2, 10, st.session_state.config['num_topics'], 1,
+            help="Number of topics to extract from feedback"
+        )
+        st.session_state.config['num_clusters'] = st.slider(
+            "Number of Clusters", 2, 10, st.session_state.config['num_clusters'], 1,
+            help="Number of clusters to create from feedback"
+        )
+        st.session_state.config['min_word_length'] = st.slider(
+            "Minimum Word Length", 2, 6, st.session_state.config['min_word_length'], 1,
+            help="Minimum length of words to include in analysis"
+        )
 
     if uploaded_file is not None:
         try:
@@ -1929,6 +1947,9 @@ def process_uploaded_file(uploaded_file):
 
 # Main app function
 def main():
+    # Make sure session state is initialized
+    initialize_session_state()
+
     # Display title
     st.title("Product Pulse: Advanced AI Feedback Analyzer")
 
