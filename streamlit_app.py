@@ -145,7 +145,7 @@ def main():
         if st.button("Launch Basic App", use_container_width=True):
             # Run the simple app
             st.session_state['app_mode'] = 'simple'
-            st.experimental_rerun()
+            st.rerun()
 
     # Check if we should run one of the apps
     if 'app_mode' in st.session_state:
@@ -158,7 +158,7 @@ def main():
             # Add a button to return to the launcher
             if st.button("Return to Launcher"):
                 del st.session_state['app_mode']
-                st.experimental_rerun()
+                st.rerun()
         elif st.session_state['app_mode'] == 'simple':
             st.subheader("Running Basic App...")
             # Import the module but don't call set_page_config again
@@ -168,7 +168,7 @@ def main():
             # Add a button to return to the launcher
             if st.button("Return to Launcher"):
                 del st.session_state['app_mode']
-                st.experimental_rerun()
+                st.rerun()
 
     # App information
     st.markdown("""
