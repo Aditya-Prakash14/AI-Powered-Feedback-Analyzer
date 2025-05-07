@@ -1,10 +1,5 @@
-# Set page configuration MUST be the first Streamlit command
+# Import streamlit
 import streamlit as st
-st.set_page_config(
-    page_title="Product Pulse: Advanced AI Feedback Analyzer",
-    page_icon="📊",
-    layout="wide",
-)
 
 # Import other libraries
 import pandas as pd
@@ -1388,6 +1383,554 @@ def main():
 
             # Create download link
             st.markdown(get_download_link(csv, "sample_feedback.csv", "csv"), unsafe_allow_html=True)
+
+# Function to process uploaded file
+def process_uploaded_file(uploaded_file):
+    # Sidebar
+    st.sidebar.header("Options")
+
+    # Configuration panel
+    with st.sidebar.expander("Configuration", expanded=False):
+        st.slider("Sentiment Threshold", 0.0, 0.5, st.session_state.config['sentiment_threshold'], 0.05,
+                 help="Threshold for classifying sentiment as positive or negative")
+        st.slider("Minimum Topic Words", 3, 10, st.session_state.config['min_topic_words'], 1,
+                 help="Minimum number of words to include in each topic")
+        st.slider("Number of Topics", 2, 10, st.session_state.config['num_topics'], 1,
+                 help="Number of topics to extract from feedback")
+        st.slider("Number of Clusters", 2, 10, st.session_state.config['num_clusters'], 1,
+                 help="Number of clusters to create from feedback")
+        st.slider("Minimum Word Length", 2, 6, st.session_state.config['min_word_length'], 1,
+                 help="Minimum length of words to include in analysis")
+
+    if uploaded_file is not None:
+        try:
+            # Process the file based on its type
+            file_extension = uploaded_file.name.split('.')[-1].lower()
+
+            # Read the file content
+            file_content = uploaded_file.read()
+
+            # Check if it's a Borderlands format
+            if is_borderlands_format(file_content):
+                st.info("Detected Borderlands format. Using special handler.")
+                # Reset the file pointer
+                uploaded_file.seek(0)
+                data = process_borderlands_format(uploaded_file)
+            else:
+                # Reset the file pointer
+                uploaded_file.seek(0)
+
+                if file_extension == 'csv':
+                    # Detect delimiter and encoding
+                    delimiter = detect_delimiter(file_content.decode('utf-8', errors='ignore'))
+                    encoding = detect_encoding(file_content)
+
+                    # Read CSV with detected parameters
+                    data = pd.read_csv(uploaded_file, delimiter=delimiter, encoding=encoding, error_bad_lines=False)
+
+                elif file_extension == 'json':
+                    data = pd.read_json(uploaded_file)
+
+                elif file_extension == 'xlsx':
+                    data = pd.read_excel(uploaded_file)
+
+                elif file_extension == 'txt':
+                    # For text files, create a simple DataFrame with one column
+                    lines = file_content.decode('utf-8', errors='ignore').splitlines()
+                    data = pd.DataFrame({'text': [line for line in lines if line.strip()]})
+
+                else:
+                    st.error(f"Unsupported file format: {file_extension}")
+                    return
+
+            # Display column mapping if needed
+            if 'text' not in data.columns:
+                st.warning("Text column not found. Please map columns.")
+
+                # Display column mapping interface
+                st.subheader("Column Mapping")
+
+                # Map text column
+                text_col = st.selectbox("Select the column containing feedback text:", data.columns)
+
+                # Map platform column if available
+                platform_col = None
+                if len(data.columns) > 1:
+                    platform_options = ['None'] + list(data.columns)
+                    platform_col = st.selectbox("Select the column containing platform information (optional):", platform_options)
+                    if platform_col == 'None':
+                        platform_col = None
+
+                # Apply mapping
+                if st.button("Apply Mapping"):
+                    # Create a new DataFrame with mapped columns
+                    mapped_data = pd.DataFrame()
+                    mapped_data['text'] = data[text_col]
+
+                    if platform_col:
+                        mapped_data['platform'] = data[platform_col]
+                    else:
+                        mapped_data['platform'] = 'Unknown'
+
+                    data = mapped_data
+                    st.success("Column mapping applied!")
+                else:
+                    return
+
+            # Ensure platform column exists
+            if 'platform' not in data.columns:
+                data['platform'] = 'Unknown'
+
+            # Store the data
+            st.session_state.data = data
+
+            # Process data button
+            if st.sidebar.button("Process Feedback"):
+                with st.spinner("Processing feedback..."):
+                    # Preprocess text
+                    data['processed_text'] = data['text'].apply(lambda x: preprocess_text(x, remove_stopwords=True))
+
+                    # Analyze sentiment
+                    data['sentiment'] = data['processed_text'].apply(analyze_sentiment)
+
+                    # Categorize feedback
+                    data['category'] = data.apply(lambda row: categorize_feedback(row['processed_text'], row['sentiment']), axis=1)
+
+                    # Store processed data
+                    st.session_state.processed_data = data
+
+                    # Generate summaries for each category
+                    categories = ['pain point', 'feature request', 'positive feedback', 'uncategorized']
+                    summaries = {}
+
+                    for category in categories:
+                        category_texts = data[data['category'] == category]['processed_text'].tolist()
+
+                        # Get sentiment counts for this category
+                        sentiment_counts = data[data['category'] == category]['sentiment'].value_counts().to_dict()
+
+                        # Generate summary
+                        summaries[category] = summarize_feedback(category_texts, category, sentiment_counts)
+
+                    st.session_state.summaries = summaries
+
+                    # Cluster the feedback
+                    all_texts = data['processed_text'].tolist()
+                    clusters = cluster_feedback(all_texts, st.session_state.config['num_clusters'])
+                    data['cluster'] = clusters
+
+                    # Update processed data with clusters
+                    st.session_state.processed_data = data
+
+                st.success("Feedback processed successfully!")
+
+        except Exception as e:
+            st.error(f"Error processing file: {str(e)}")
+            st.exception(e)
+
+    # Main content
+    if st.session_state.processed_data is not None:
+        # Display tabs
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["Overview", "Sentiment Analysis", "Categories", "Topics & Clusters", "Export"])
+
+        with tab1:
+            st.header("Feedback Overview")
+
+            # Display basic stats
+            st.subheader("Basic Statistics")
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.metric("Total Feedback Items", len(st.session_state.processed_data))
+
+            with col2:
+                platforms = st.session_state.processed_data['platform'].value_counts()
+                st.metric("Platforms", len(platforms))
+
+            with col3:
+                avg_length = st.session_state.processed_data['text'].str.len().mean()
+                st.metric("Average Feedback Length", f"{avg_length:.1f} chars")
+
+            # Display raw data
+            st.subheader("Raw Data")
+            st.dataframe(st.session_state.data)
+
+        with tab2:
+            st.header("Sentiment Analysis")
+
+            # Display sentiment distribution
+            sentiment_counts = st.session_state.processed_data['sentiment'].value_counts()
+
+            col1, col2 = st.columns([1, 2])
+
+            with col1:
+                st.subheader("Sentiment Counts")
+                st.dataframe(sentiment_counts)
+
+            with col2:
+                st.subheader("Sentiment Distribution")
+
+                # Create a pie chart with Plotly
+                fig = px.pie(
+                    values=sentiment_counts.values,
+                    names=sentiment_counts.index,
+                    title="Sentiment Distribution",
+                    color=sentiment_counts.index,
+                    color_discrete_map={
+                        'positive': 'green',
+                        'neutral': 'gray',
+                        'negative': 'red'
+                    }
+                )
+                st.plotly_chart(fig)
+
+            # Display sentiment by platform
+            st.subheader("Sentiment by Platform")
+
+            # Create a grouped bar chart
+            sentiment_by_platform = pd.crosstab(
+                st.session_state.processed_data['platform'],
+                st.session_state.processed_data['sentiment']
+            )
+
+            fig = px.bar(
+                sentiment_by_platform,
+                barmode='group',
+                title="Sentiment by Platform",
+                color_discrete_map={
+                    'positive': 'green',
+                    'neutral': 'gray',
+                    'negative': 'red'
+                }
+            )
+            st.plotly_chart(fig)
+
+            # Display word clouds by sentiment
+            st.subheader("Word Clouds by Sentiment")
+
+            sentiment_tabs = st.tabs(["Positive", "Neutral", "Negative"])
+
+            with sentiment_tabs[0]:
+                positive_texts = st.session_state.processed_data[st.session_state.processed_data['sentiment'] == 'positive']['processed_text'].tolist()
+                positive_cloud = generate_wordcloud(positive_texts, "Positive Feedback Word Cloud")
+                if positive_cloud:
+                    st.pyplot(positive_cloud)
+                else:
+                    st.info("Not enough positive feedback for word cloud.")
+
+            with sentiment_tabs[1]:
+                neutral_texts = st.session_state.processed_data[st.session_state.processed_data['sentiment'] == 'neutral']['processed_text'].tolist()
+                neutral_cloud = generate_wordcloud(neutral_texts, "Neutral Feedback Word Cloud")
+                if neutral_cloud:
+                    st.pyplot(neutral_cloud)
+                else:
+                    st.info("Not enough neutral feedback for word cloud.")
+
+            with sentiment_tabs[2]:
+                negative_texts = st.session_state.processed_data[st.session_state.processed_data['sentiment'] == 'negative']['processed_text'].tolist()
+                negative_cloud = generate_wordcloud(negative_texts, "Negative Feedback Word Cloud")
+                if negative_cloud:
+                    st.pyplot(negative_cloud)
+                else:
+                    st.info("Not enough negative feedback for word cloud.")
+
+        with tab3:
+            st.header("Feedback Categories")
+
+            # Display category distribution
+            category_counts = st.session_state.processed_data['category'].value_counts()
+
+            col1, col2 = st.columns([1, 2])
+
+            with col1:
+                st.subheader("Category Counts")
+                st.dataframe(category_counts)
+
+            with col2:
+                st.subheader("Category Distribution")
+
+                # Create a pie chart with Plotly
+                fig = px.pie(
+                    values=category_counts.values,
+                    names=category_counts.index,
+                    title="Category Distribution",
+                    color=category_counts.index,
+                    color_discrete_map={
+                        'pain point': 'red',
+                        'feature request': 'blue',
+                        'positive feedback': 'green',
+                        'uncategorized': 'gray'
+                    }
+                )
+                st.plotly_chart(fig)
+
+            # Display summaries
+            st.subheader("Category Summaries")
+
+            for category, summary in st.session_state.summaries.items():
+                if category != 'uncategorized' or len(st.session_state.processed_data[st.session_state.processed_data['category'] == 'uncategorized']) > 0:
+                    with st.expander(f"{category.title()} ({len(st.session_state.processed_data[st.session_state.processed_data['category'] == category])} items)", expanded=True):
+                        st.markdown(summary)
+
+            # Display categorized data
+            st.subheader("Categorized Data")
+            st.dataframe(st.session_state.processed_data[['text', 'platform', 'sentiment', 'category']])
+
+        with tab4:
+            st.header("Topics & Clusters")
+
+            # Display topics
+            st.subheader("Key Topics by Category")
+
+            for category, topics in st.session_state.topics.items():
+                if category != 'uncategorized' or len(st.session_state.processed_data[st.session_state.processed_data['category'] == 'uncategorized']) > 0:
+                    with st.expander(f"Topics in {category.title()}", expanded=True):
+                        for i, topic_words in enumerate(topics):
+                            st.write(f"**Topic {i+1}:** {', '.join(topic_words)}")
+
+            # Display clusters
+            st.subheader("Feedback Clusters")
+
+            # Count feedback items per cluster
+            cluster_counts = st.session_state.processed_data['cluster'].value_counts().sort_index()
+
+            col1, col2 = st.columns([1, 2])
+
+            with col1:
+                st.write("Cluster Sizes")
+                st.dataframe(cluster_counts)
+
+            with col2:
+                # Create a bar chart with Plotly
+                fig = px.bar(
+                    x=cluster_counts.index,
+                    y=cluster_counts.values,
+                    labels={'x': 'Cluster', 'y': 'Count'},
+                    title="Feedback Items per Cluster"
+                )
+                st.plotly_chart(fig)
+
+            # Display top words for each cluster
+            st.subheader("Top Words by Cluster")
+
+            for cluster in sorted(st.session_state.processed_data['cluster'].unique()):
+                cluster_texts = st.session_state.processed_data[st.session_state.processed_data['cluster'] == cluster]['processed_text'].tolist()
+
+                # Count word frequency
+                word_freq = {}
+                for text in cluster_texts:
+                    words = text.split()
+                    for word in words:
+                        if len(word) > st.session_state.config['min_word_length']:
+                            word_freq[word] = word_freq.get(word, 0) + 1
+
+                # Sort words by frequency
+                sorted_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
+                top_words = [w[0] for w in sorted_words[:10] if w[1] > 1]
+
+                with st.expander(f"Cluster {cluster} ({len(cluster_texts)} items)", expanded=False):
+                    if top_words:
+                        st.write(f"**Top words:** {', '.join(top_words)}")
+                    else:
+                        st.write("No common words found in this cluster.")
+
+                    # Display sample feedback from this cluster
+                    st.write("**Sample feedback:**")
+                    samples = st.session_state.processed_data[st.session_state.processed_data['cluster'] == cluster]['text'].head(3).tolist()
+                    for i, sample in enumerate(samples):
+                        st.write(f"{i+1}. {sample}")
+
+        with tab5:
+            st.header("Export Results")
+
+            # Export options
+            st.subheader("Export Options")
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                if st.button("Generate CSV Report"):
+                    with st.spinner("Generating CSV..."):
+                        # Create a report DataFrame
+                        report_df = pd.DataFrame({
+                            'Category': list(st.session_state.summaries.keys()),
+                            'Summary': list(st.session_state.summaries.values()),
+                            'Count': [len(st.session_state.processed_data[st.session_state.processed_data['category'] == cat]) for cat in st.session_state.summaries.keys()]
+                        })
+
+                        # Convert to CSV
+                        csv = report_df.to_csv(index=False).encode()
+
+                        # Create download link
+                        st.markdown(get_download_link(csv, "feedback_analysis.csv", "csv"), unsafe_allow_html=True)
+
+            with col2:
+                if st.button("Generate Excel Report"):
+                    with st.spinner("Generating Excel..."):
+                        try:
+                            # Create Excel file in memory
+                            output = BytesIO()
+
+                            # Create Excel writer
+                            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                # Write summary sheet
+                                summary_df = pd.DataFrame({
+                                    'Category': list(st.session_state.summaries.keys()),
+                                    'Count': [len(st.session_state.processed_data[st.session_state.processed_data['category'] == cat]) for cat in st.session_state.summaries.keys()]
+                                })
+                                summary_df.to_excel(writer, sheet_name='Summary', index=False)
+
+                                # Write full data sheet
+                                st.session_state.processed_data.to_excel(writer, sheet_name='Full Data', index=False)
+
+                                # Write sheet for each category
+                                for category in st.session_state.summaries.keys():
+                                    if category != 'uncategorized' or len(st.session_state.processed_data[st.session_state.processed_data['category'] == 'uncategorized']) > 0:
+                                        category_data = st.session_state.processed_data[st.session_state.processed_data['category'] == category]
+                                        if not category_data.empty:
+                                            category_data.to_excel(writer, sheet_name=category[:31], index=False)  # Excel sheet names limited to 31 chars
+
+                            # Get the Excel data
+                            excel_data = output.getvalue()
+
+                            # Create download link
+                            st.markdown(get_download_link(excel_data, "feedback_analysis.xlsx", "xlsx"), unsafe_allow_html=True)
+
+                        except Exception as e:
+                            st.error(f"Error generating Excel report: {str(e)}")
+                            # Fallback to CSV
+                            st.warning("Falling back to CSV format.")
+                            csv = st.session_state.processed_data.to_csv(index=False).encode()
+                            st.markdown(get_download_link(csv, "feedback_analysis.csv", "csv"), unsafe_allow_html=True)
+
+            with col3:
+                if st.button("Generate PDF Report"):
+                    with st.spinner("Generating PDF..."):
+                        try:
+                            # Create PDF report
+                            pdf_data = create_pdf_report(st.session_state.processed_data, st.session_state.summaries, st.session_state.topics)
+
+                            # Create download link
+                            st.markdown(get_download_link(pdf_data, "feedback_analysis.pdf", "pdf"), unsafe_allow_html=True)
+
+                        except Exception as e:
+                            st.error(f"Error generating PDF report: {str(e)}")
+                            # Fallback to text
+                            st.warning("Falling back to text format.")
+
+                            # Create a simple text report
+                            text_report = "# Feedback Analysis Report\n\n"
+                            text_report += f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+
+                            text_report += "## Summaries\n\n"
+                            for category, summary in st.session_state.summaries.items():
+                                text_report += f"### {category.title()}\n\n{summary}\n\n"
+
+                            # Convert to bytes
+                            text_data = text_report.encode()
+
+                            # Create download link
+                            st.markdown(get_download_link(text_data, "feedback_analysis.txt", "txt"), unsafe_allow_html=True)
+
+            # Export raw data
+            st.subheader("Export Raw Data")
+            if st.button("Export Processed Data"):
+                with st.spinner("Preparing data..."):
+                    # Convert to CSV
+                    csv = st.session_state.processed_data.to_csv(index=False).encode()
+
+                    # Create download link
+                    st.markdown(get_download_link(csv, "processed_feedback_data.csv", "csv"), unsafe_allow_html=True)
+
+    else:
+        # Display instructions
+        st.info("""
+        ## How to use Product Pulse Advanced:
+
+        1. Upload a feedback data file (CSV, JSON, Excel, or text)
+        2. If your file has non-standard column names, map them in the "Column Mapping" section
+        3. Click "Process Feedback" to analyze the data
+        4. Explore the results in the tabs and generate reports
+
+        ### Advanced Features:
+
+        - **Sentiment Analysis**: Automatically detects positive, neutral, and negative feedback
+        - **Topic Modeling**: Identifies key themes in your feedback
+        - **Clustering**: Groups similar feedback together
+        - **Multiple Export Options**: Generate CSV, Excel, or PDF reports
+        - **Customizable Analysis**: Adjust parameters in the configuration panel
+        """)
+
+        # Sample data format
+        st.subheader("Sample Data Format")
+        sample_data = pd.DataFrame({
+            'text': [
+                "I love this app! It's so intuitive and helpful.",
+                "The app keeps crashing when I try to upload photos.",
+                "Would be great if you could add dark mode to the app."
+            ],
+            'platform': ['App Store', 'Google Play', 'Twitter'],
+            'date': ['2023-01-15', '2023-01-20', '2023-01-25']
+        })
+
+        st.dataframe(sample_data)
+
+        # Option to generate sample data
+        if st.button("Generate Sample Data File"):
+            # Create more sample data
+            texts = [
+                "I love this app! It's so intuitive and helpful.",
+                "The app keeps crashing when I try to upload photos.",
+                "Would be great if you could add dark mode to the app.",
+                "This is the best productivity app I've ever used!",
+                "Can't login after the latest update. Please fix ASAP.",
+                "The UI is beautiful but navigation is confusing.",
+                "Would love to see integration with other tools.",
+                "App is too slow on older devices.",
+                "Customer support was amazing when I had an issue.",
+                "The new feature is exactly what I was looking for!",
+                "I've been using this app for years and it keeps getting better!",
+                "The notifications are too frequent and annoying.",
+                "Would it be possible to add multi-user support?",
+                "The app crashes every time I try to save my progress.",
+                "Please add the ability to export data to CSV.",
+                "The search functionality is broken in the latest update.",
+                "I'm impressed with how responsive the app is on my old phone.",
+                "The pricing is too high compared to similar apps.",
+                "Your recent update fixed all the issues I was having!",
+                "The app needs better documentation for new users."
+            ]
+
+            platforms = ['App Store', 'Google Play', 'Twitter', 'Email', 'Website']
+
+            # Generate dates in the last 90 days
+            today = datetime.datetime.now()
+            dates = [(today - datetime.timedelta(days=np.random.randint(1, 90))).strftime('%Y-%m-%d') for _ in range(30)]
+
+            # Create DataFrame
+            sample_df = pd.DataFrame({
+                'text': np.random.choice(texts, size=30, replace=True),
+                'platform': np.random.choice(platforms, size=30, replace=True),
+                'date': dates
+            })
+
+            # Convert to CSV
+            csv = sample_df.to_csv(index=False).encode()
+
+            # Create download link
+            st.markdown(get_download_link(csv, "sample_feedback.csv", "csv"), unsafe_allow_html=True)
+
+# Main app function
+def main():
+    # Display title
+    st.title("Product Pulse: Advanced AI Feedback Analyzer")
+
+    # File upload
+    uploaded_file = st.sidebar.file_uploader("Upload feedback data", type=["csv", "json", "xlsx", "txt"])
+
+    # Process the uploaded file
+    process_uploaded_file(uploaded_file)
 
 if __name__ == "__main__":
     main()
