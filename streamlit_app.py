@@ -139,7 +139,7 @@ def main():
         if st.button("Launch Advanced App", use_container_width=True):
             # Run the advanced app
             st.session_state['app_mode'] = 'advanced'
-            st.experimental_rerun()
+            st.rerun()
 
     with col2:
         if st.button("Launch Basic App", use_container_width=True):
