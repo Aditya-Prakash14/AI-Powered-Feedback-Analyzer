@@ -8,6 +8,7 @@ import re
 import json
 import os
 import io
+from io import BytesIO
 import base64
 import chardet
 import matplotlib.pyplot as plt
@@ -1426,7 +1427,12 @@ def process_uploaded_file(uploaded_file):
                     encoding = detect_encoding(file_content)
 
                     # Read CSV with detected parameters
-                    data = pd.read_csv(uploaded_file, delimiter=delimiter, encoding=encoding, error_bad_lines=False)
+                    try:
+                        # For newer versions of pandas (1.3.0+)
+                        data = pd.read_csv(uploaded_file, delimiter=delimiter, encoding=encoding, on_bad_lines='warn')
+                    except TypeError:
+                        # For older versions of pandas
+                        data = pd.read_csv(uploaded_file, delimiter=delimiter, encoding=encoding, error_bad_lines=False)
 
                 elif file_extension == 'json':
                     data = pd.read_json(uploaded_file)
