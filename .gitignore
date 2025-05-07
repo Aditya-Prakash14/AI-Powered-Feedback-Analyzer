@@ -132,6 +132,9 @@ dmypy.json
 !sample_data.json
 !sample_data.xlsx
 !sample_borderlands.csv
+!railway.json
+!Procfile
+!nixpacks.toml
 
 # NLTK data
 nltk_data/
